@@ -639,17 +639,33 @@ elif active_tab == "Browse":
         with col_info:
             st.markdown(f"**{len(content):,} characters, {len(content.splitlines()):,} lines**")
         with col_open:
-            if st.button("Show file path", key="show_path"):
+            if st.button("Show file info", key="show_path"):
                 st.session_state["_show_path"] = not st.session_state.get("_show_path", False)
         if st.session_state.get("_show_path"):
+            full_meta = text_dirs[idx][2]
+            zenodo_id = full_meta.get("id", "")
+            zenodo_url = f"https://zenodo.org/records/{zenodo_id}" if zenodo_id else ""
+
+            import subprocess
+
+            def open_folder(path=str(version_dir)):
+                subprocess.Popen(["xdg-open", path])
+
             path_col, btn_col = st.columns([4, 1])
             with path_col:
                 st.code(str(text_file_path), language=None)
                 st.caption(f"Version folder: `{version_dir}`")
             with btn_col:
-                if st.button("Open in explorer", key="open_explorer"):
-                    import subprocess
-                    subprocess.Popen(["xdg-open", str(version_dir)])
+                st.button("Open in explorer", key="open_explorer", on_click=open_folder)
+
+            if zenodo_url:
+                url_col, id_col, btn_col2 = st.columns([3, 1, 1])
+                with url_col:
+                    st.code(zenodo_url, language=None)
+                with id_col:
+                    st.code(str(zenodo_id), language=None)
+                with btn_col2:
+                    st.link_button("Open in browser", zenodo_url)
 
         # browse_search is set directly by navigation before this widget renders
         local_search = st.text_input("Highlight text", key="browse_search")
