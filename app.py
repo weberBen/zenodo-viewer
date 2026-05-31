@@ -18,7 +18,6 @@ from streamlit_timeline import st_timeline
 
 from zenodo_versions import (
     convert_pdfs,
-    download_all_versions,
     extract_archives,
     find_target_files,
     get_all_versions,
@@ -33,6 +32,26 @@ OUTPUT_DIR = Path("zenodo_output")
 DOWNLOADS_DIR = OUTPUT_DIR / "downloads"
 
 st.set_page_config(page_title="Zenodo Version Tracker", layout="wide")
+
+TABS = ["Diff Viewer", "Search", "Browse"]
+
+
+# ---------------------------------------------------------------------------
+# Navigation helper
+# ---------------------------------------------------------------------------
+
+
+def navigate_to_browse(version_idx: int, file_name: str = None, line: int = None, highlight: str = None):
+    """Navigate to Browse tab showing a specific version."""
+    st.session_state["active_tab"] = "Browse"
+    st.session_state["browse_version"] = version_idx
+    if file_name:
+        st.session_state["browse_file"] = file_name
+    if line:
+        st.session_state["browse_line"] = line
+    if highlight:
+        st.session_state["browse_highlight"] = highlight
+    st.rerun()
 
 
 # ---------------------------------------------------------------------------
@@ -49,25 +68,21 @@ def derive_version_name(full_meta: dict) -> str:
     """Derive a meaningful version name from full record metadata."""
     nested = full_meta.get("metadata", {})
 
-    # 1. Explicit metadata.version
     explicit = nested.get("version")
     if explicit:
         return explicit
 
-    # 2. Derive from filename (e.g. PathThinker_v0-1.pdf -> v0-1)
     files = full_meta.get("files", [])
     if files:
         stem = files[0].get("key", "").rsplit(".", 1)[0]
         parts = stem.rsplit("_", 1)
         if len(parts) == 2:
             version_part = parts[1]
-            # If multiple v-prefixed parts (e.g. v0-v0.14.0), take the last semver
             sub_versions = re.findall(r'v[\d]+(?:[.\-]\d+)*', version_part)
             if sub_versions and len(sub_versions) > 1:
                 return sub_versions[-1]
             return version_part
 
-    # 3. Fallback: relations.version index
     relations = nested.get("relations", {})
     version_info = relations.get("version", [])
     if version_info and isinstance(version_info, list) and len(version_info) > 0:
@@ -153,7 +168,6 @@ def compute_diff_lines(text_a: str, text_b: str) -> dict:
                 result["removed"].append(line)
             for line in lines_b[j1:j2]:
                 result["added"].append(line)
-            # Interleave for combined view
             max_len = max(i2 - i1, j2 - j1)
             for k in range(max_len):
                 old = lines_a[i1 + k] if k < (i2 - i1) else ""
@@ -204,7 +218,6 @@ if st.sidebar.button("Fetch & Download", type="primary"):
         version_dir = DOWNLOADS_DIR / f"{i+1:03d}_{version_label}_{vid}"
         version_dir.mkdir(parents=True, exist_ok=True)
 
-        # Check if already complete
         meta_file = version_dir / "_metadata.json"
         files = version.get("files", [])
         already_done = meta_file.exists()
@@ -237,7 +250,6 @@ if st.sidebar.button("Fetch & Download", type="primary"):
 
             meta_file.write_text(json.dumps(version, indent=2))
 
-        # Extract & convert
         extract_archives(version_dir)
         target_files = find_target_files(version_dir)
         if target_files["pdf"] or target_files["tex"]:
@@ -259,13 +271,22 @@ if not text_dirs:
     st.info("No data yet. Enter a Zenodo record URL and click 'Fetch & Download' in the sidebar.")
     st.stop()
 
-# Sidebar version list
+display_labels = [get_display_label(e) for e in text_dirs]
+
+# ---------------------------------------------------------------------------
+# Sidebar: clickable version list
+# ---------------------------------------------------------------------------
+
 st.sidebar.markdown("---")
 st.sidebar.markdown(f"**{len(text_dirs)} version(s)**")
-for label, _, full_meta in text_dirs:
-    v = derive_version_name(full_meta)
-    date = get_created_date(full_meta)
-    st.sidebar.markdown(f"- {v} ({date})")
+
+sidebar_container = st.sidebar.container(height=400)
+with sidebar_container:
+    for i, (label, _, full_meta) in enumerate(text_dirs):
+        v = derive_version_name(full_meta)
+        date = get_created_date(full_meta)
+        if st.button(f"{v} ({date})", key=f"sidebar_v_{i}", use_container_width=True):
+            navigate_to_browse(i)
 
 # ---------------------------------------------------------------------------
 # Timeline
@@ -302,25 +323,40 @@ if timeline_items:
     )
 
     if selected and "id" in selected:
-        st.session_state["selected_version"] = selected["id"]
+        clicked_id = selected["id"]
+        # Navigate to browse on timeline click
+        if st.session_state.get("_timeline_last_click") != clicked_id:
+            st.session_state["_timeline_last_click"] = clicked_id
+            navigate_to_browse(clicked_id)
 
 st.markdown("---")
 
 # ---------------------------------------------------------------------------
-# Tabs
+# Tab navigation via segmented control (supports programmatic switching)
 # ---------------------------------------------------------------------------
 
-tab_diff, tab_search, tab_browse = st.tabs(["Diff Viewer", "Search", "Browse"])
+if "active_tab" not in st.session_state:
+    st.session_state["active_tab"] = TABS[0]
+
+active_tab = st.segmented_control(
+    "Navigation",
+    TABS,
+    default=st.session_state["active_tab"],
+    key="tab_selector",
+    label_visibility="collapsed",
+)
+
+if active_tab:
+    st.session_state["active_tab"] = active_tab
 
 # ---------------------------------------------------------------------------
-# Tab 1: Diff Viewer - full control over display
+# Tab: Diff Viewer
 # ---------------------------------------------------------------------------
 
-with tab_diff:
+if active_tab == "Diff Viewer":
     st.header("Compare Versions")
 
     col1, col2 = st.columns(2)
-    display_labels = [get_display_label(e) for e in text_dirs]
 
     with col1:
         idx_a = st.selectbox("Version A (older)", range(len(display_labels)),
@@ -330,20 +366,25 @@ with tab_diff:
         idx_b = st.selectbox("Version B (newer)", range(len(display_labels)),
                              index=default_b, format_func=lambda i: display_labels[i], key="diff_b")
 
+    # Quick links to browse each version
+    col_btn1, col_btn2, _ = st.columns([1, 1, 3])
+    with col_btn1:
+        if st.button(f"Open {display_labels[idx_a]}", key="diff_open_a"):
+            navigate_to_browse(idx_a)
+    with col_btn2:
+        if st.button(f"Open {display_labels[idx_b]}", key="diff_open_b"):
+            navigate_to_browse(idx_b)
+
     texts_a = load_version_text(text_dirs[idx_a][1])
     texts_b = load_version_text(text_dirs[idx_b][1])
 
-    # Build paired file list: match files across versions
-    # If each version has one file, pair them directly regardless of name
     files_a = sorted(texts_a.keys())
     files_b = sorted(texts_b.keys())
 
     paired_files = []
     if len(files_a) == 1 and len(files_b) == 1:
-        # Single file each: pair them
         paired_files.append((files_a[0], files_b[0]))
     else:
-        # Match by exact name first, then pair remaining by order
         matched_a = set()
         matched_b = set()
         for fa in files_a:
@@ -355,7 +396,6 @@ with tab_diff:
         remaining_b = [f for f in files_b if f not in matched_b]
         for fa, fb in zip(remaining_a, remaining_b):
             paired_files.append((fa, fb))
-        # Files only in one version
         for fa in remaining_a[len(remaining_b):]:
             paired_files.append((fa, None))
         for fb in remaining_b[len(remaining_a):]:
@@ -369,7 +409,7 @@ with tab_diff:
             if fa == fb:
                 pair_labels.append(fa)
             elif fa and fb:
-                pair_labels.append(f"{fa}  ↔  {fb}")
+                pair_labels.append(f"{fa}  ->  {fb}")
             elif fa:
                 pair_labels.append(f"{fa}  (removed)")
             else:
@@ -384,7 +424,6 @@ with tab_diff:
         if text_a == text_b:
             st.success("Files are identical.")
         else:
-            # Display mode
             diff_mode = st.radio(
                 "Display mode",
                 ["Side by side", "Additions only", "Deletions only"],
@@ -424,7 +463,6 @@ with tab_diff:
                     f"{len(diff_data['unchanged'])} unchanged**"
                 )
 
-                # Build side-by-side HTML table
                 html = [
                     '<div style="overflow-x: auto; font-family: monospace; font-size: 12px;">',
                     '<table style="width: 100%; border-collapse: collapse; table-layout: fixed;">',
@@ -473,10 +511,10 @@ with tab_diff:
                 st.markdown("".join(html), unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
-# Tab 2: Search with highlighting and navigation
+# Tab: Search
 # ---------------------------------------------------------------------------
 
-with tab_search:
+elif active_tab == "Search":
     st.header("Search Across All Versions")
 
     query = st.text_input("Search term or phrase", key="search_query")
@@ -516,7 +554,6 @@ with tab_search:
         if not all_results:
             st.warning(f"No results for '{query}'")
         else:
-            # First occurrence
             first = all_results[0]
             st.info(
                 f"**First occurrence:** {first['version_display']} "
@@ -524,15 +561,13 @@ with tab_search:
             )
             st.success(f"**{len(all_results)}** match(es) across all versions")
 
-            # Group by version
             by_version = {}
             for r in all_results:
                 by_version.setdefault(r["version_display"], []).append(r)
 
             for version_display, matches in by_version.items():
-                with st.expander(f"{version_display} — {len(matches)} match(es)", expanded=False):
+                with st.expander(f"{version_display} -- {len(matches)} match(es)", expanded=False):
                     for i, m in enumerate(matches[:100]):
-                        # Highlighted context
                         context_html = m["context"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                         context_html = highlight_text_html(context_html, query, case_sensitive)
 
@@ -545,27 +580,19 @@ with tab_search:
                             unsafe_allow_html=True,
                         )
 
-                        # Button to open this version at this location in Browse tab
-                        btn_key = f"goto_{version_display}_{m['file']}_{m['line']}_{i}"
-                        if st.button(f"Open in Browse tab", key=btn_key):
-                            # Find the index of this version
+                        btn_key = f"goto_{m['version_label']}_{m['file']}_{m['line']}_{i}"
+                        if st.button(f"Open full document at line {m['line']}", key=btn_key):
                             for idx, (lbl, _, _) in enumerate(text_dirs):
                                 if lbl == m["version_label"]:
-                                    st.session_state["browse_version"] = idx
-                                    st.session_state["browse_file"] = m["file"]
-                                    st.session_state["browse_line"] = m["line"]
-                                    st.session_state["browse_highlight"] = query
-                                    st.info(f"Switch to the **Browse** tab to see {m['file']} at line {m['line']}")
-                                    break
+                                    navigate_to_browse(idx, m["file"], m["line"], query)
 
 # ---------------------------------------------------------------------------
-# Tab 3: Browse with highlighting
+# Tab: Browse
 # ---------------------------------------------------------------------------
 
-with tab_browse:
+elif active_tab == "Browse":
     st.header("Browse Version Content")
 
-    # Use session state if coming from search
     default_idx = st.session_state.get("browse_version", 0)
     idx = st.selectbox(
         "Select version",
@@ -589,35 +616,30 @@ with tab_browse:
 
         st.markdown(f"**{len(content):,} characters, {len(content.splitlines()):,} lines**")
 
-        # Search/highlight
-        default_highlight = st.session_state.get("browse_highlight", "")
+        # Highlight bar
+        default_highlight = st.session_state.pop("browse_highlight", "")
         local_search = st.text_input("Highlight text", value=default_highlight, key="browse_search")
-
-        # Clear session state browse params after use
-        if "browse_highlight" in st.session_state and st.session_state.get("_browse_used"):
-            del st.session_state["browse_highlight"]
-        st.session_state["_browse_used"] = True
 
         lines = content.splitlines()
 
+        # Jump target from navigation
+        target_line = st.session_state.pop("browse_line", None)
+
         if local_search:
-            flags = re.IGNORECASE
+            search_flags = re.IGNORECASE
             matching_indices = [
                 i for i, line in enumerate(lines)
-                if re.search(re.escape(local_search), line, flags)
+                if re.search(re.escape(local_search), line, search_flags)
             ]
 
             st.info(f"{len(matching_indices)} matching line(s)")
 
-            # Jump to specific line from search
-            target_line = st.session_state.get("browse_line", None)
             if target_line and target_line - 1 in range(len(lines)):
-                # Show context around target line
                 start = max(0, target_line - 10)
                 end = min(len(lines), target_line + 10)
                 context_lines = lines[start:end]
                 context_text = "\n".join(
-                    f"L{start+i+1:4d} | {line}" for i, line in enumerate(context_lines)
+                    f"L{start+j+1:4d} | {line}" for j, line in enumerate(context_lines)
                 )
                 context_html = context_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                 context_html = highlight_text_html(context_html, local_search)
@@ -628,13 +650,8 @@ with tab_browse:
                     f'{context_html}</div>',
                     unsafe_allow_html=True,
                 )
-                # Clear target after showing
-                if "browse_line" in st.session_state:
-                    del st.session_state["browse_line"]
-
                 st.markdown("---")
 
-            # Show all matches with highlighting
             for idx_line in matching_indices[:200]:
                 start = max(0, idx_line - 1)
                 end = min(len(lines), idx_line + 2)
@@ -648,9 +665,8 @@ with tab_browse:
                     unsafe_allow_html=True,
                 )
         else:
-            # Show full content (truncated for performance)
             if len(lines) > 500:
-                st.warning(f"Showing first 500 of {len(lines)} lines. Use search to navigate.")
+                st.warning(f"Showing first 500 of {len(lines)} lines. Use highlight to search.")
                 st.code("\n".join(lines[:500]), language="markdown")
             else:
                 st.code(content, language="markdown")
