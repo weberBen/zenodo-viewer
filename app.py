@@ -342,10 +342,12 @@ if nav_target:
     # Also sync browse widgets so selectboxes show the correct selection
     if nav_target == "Browse" and "browse_version" in st.session_state:
         st.session_state["browse_v"] = st.session_state["browse_version"]
-    if nav_target == "Browse" and "browse_file" in st.session_state:
-        # browse_f uses the filename directly, but selectbox expects index for range options
-        # We handle it by setting browse_f_pending and resolving inside the Browse tab
-        st.session_state["_browse_file_pending"] = st.session_state.pop("browse_file")
+    if nav_target == "Browse":
+        # Set pending file, or mark that file should be reset to first available
+        if "browse_file" in st.session_state:
+            st.session_state["_browse_file_pending"] = st.session_state.pop("browse_file")
+        else:
+            st.session_state["_browse_file_pending"] = None  # signals "use first file"
     if nav_target == "Browse" and "browse_highlight" in st.session_state:
         st.session_state["browse_search"] = st.session_state.pop("browse_highlight")
 
@@ -617,9 +619,15 @@ elif active_tab == "Browse":
         file_names = sorted(texts.keys())
 
         # Apply pending file selection from navigation
-        pending_file = st.session_state.pop("_browse_file_pending", None)
-        if pending_file and pending_file in file_names:
-            st.session_state["browse_f"] = pending_file
+        if "_browse_file_pending" in st.session_state:
+            pending_file = st.session_state.pop("_browse_file_pending")
+            if pending_file and pending_file in file_names:
+                st.session_state["browse_f"] = pending_file
+            else:
+                # No specific file or file not found — use first
+                st.session_state["browse_f"] = file_names[0]
+        elif "browse_f" in st.session_state and st.session_state["browse_f"] not in file_names:
+            st.session_state["browse_f"] = file_names[0]
 
         file_name = st.selectbox("File", file_names, key="browse_f")
         content = texts[file_name]
