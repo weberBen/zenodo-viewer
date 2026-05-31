@@ -10,6 +10,7 @@ import difflib
 import hashlib
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -292,7 +293,34 @@ with sidebar_container:
 # Timeline
 # ---------------------------------------------------------------------------
 
+def human_timedelta(date_str: str) -> str:
+    """Convert a date string to a human-readable 'time ago' string."""
+    d = datetime.strptime(date_str[:10], "%Y-%m-%d")
+    delta = datetime.now() - d
+    days = delta.days
+    if days < 0:
+        return "in the future"
+    if days == 0:
+        return "today"
+    if days == 1:
+        return "yesterday"
+    if days < 7:
+        return f"{days} days ago"
+    weeks = days // 7
+    if days < 30:
+        return f"{weeks} week{'s' if weeks > 1 else ''} ago"
+    months = days // 30
+    if days < 365:
+        return f"{months} month{'s' if months > 1 else ''} ago"
+    years = days // 365
+    remaining_months = (days % 365) // 30
+    if remaining_months > 0:
+        return f"{years} year{'s' if years > 1 else ''}, {remaining_months} month{'s' if remaining_months > 1 else ''} ago"
+    return f"{years} year{'s' if years > 1 else ''} ago"
+
+
 st.header("Version Timeline")
+
 
 timeline_items = []
 for i, (label, _, full_meta) in enumerate(text_dirs):
@@ -307,6 +335,12 @@ for i, (label, _, full_meta) in enumerate(text_dirs):
     })
 
 if timeline_items:
+    from datetime import timedelta
+
+    last_date = timeline_items[-1]["start"][:10]
+    padded_start = (datetime.strptime(last_date, "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
+    padded_end = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
+
     selected = st_timeline(
         timeline_items,
         groups=[],
@@ -314,20 +348,83 @@ if timeline_items:
             "selectable": True,
             "zoomable": True,
             "moveable": True,
-            "height": "200px",
+            "height": "220px",
             "margin": {"item": 10},
             "zoomMin": 1000 * 60 * 60 * 24,
             "zoomMax": 1000 * 60 * 60 * 24 * 365 * 2,
+            "start": padded_start,
+            "end": padded_end,
+            "showCurrentTime": True,
         },
-        height="200px",
+        height="220px",
     )
 
     if selected and "id" in selected:
         clicked_id = selected["id"]
-        # Navigate to browse on timeline click
         if st.session_state.get("_timeline_last_click") != clicked_id:
             st.session_state["_timeline_last_click"] = clicked_id
             navigate_to_browse(clicked_id)
+
+    last_created = text_dirs[-1][2].get("created", "")[:10]
+    st.markdown(
+        f'<p style="font-size: 1.1em; color: black; margin-top: 4px;">'
+        f'Last publication: <strong>{last_created}</strong> ({human_timedelta(last_created)})</p>',
+        unsafe_allow_html=True,
+    )
+
+# ---------------------------------------------------------------------------
+# Workaround: streamlit-timeline (vis.js) does not render on first page load.
+#
+# vis.js initializes inside a Streamlit iframe whose dimensions are not yet
+# finalized, resulting in a blank canvas. Manually clicking the "Search" tab
+# fixes it because the Streamlit rerun with lighter content lets the layout
+# stabilize and vis.js recalculates its dimensions.
+#
+# Approaches that did NOT work:
+# - st.rerun() on first load: stops execution before the browser renders
+#   anything, so the timeline is never displayed in the first place.
+# - Dispatching window.dispatchEvent(new Event('resize')) from a
+#   components.html script: runs in its own iframe, not in the vis.js one.
+#   The resize event never reaches vis.js.
+# - Injecting a resize event into streamlit-timeline's own index.html:
+#   vis.js has not finished initializing when the event fires, so it is
+#   ignored.
+# - Passing height=220 to _component_func: fixes the iframe size but does
+#   not solve the internal vis.js initialization issue.
+# - Targeting sibling iframes via window.parent.document.querySelectorAll
+#   to dispatch resize: blocked by cross-origin restrictions between iframes.
+#
+# Working solution: inject a client-side JS script that waits 1 second
+# (enough for the page to fully render), then clicks the "Search" button
+# in the parent DOM. This triggers a Streamlit rerun identical to a user
+# click, forcing vis.js to re-initialize correctly. The _timeline_init_done
+# flag prevents this from repeating on subsequent reruns.
+# ---------------------------------------------------------------------------
+if "_timeline_init_done" not in st.session_state:
+    st.session_state["_timeline_init_done"] = True
+    import streamlit.components.v1 as components
+    components.html("""
+    <script>
+    function clickSearch() {
+        var buttons = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
+        for (var i = 0; i < buttons.length; i++) {
+            if (buttons[i].textContent.trim() === 'Search') {
+                buttons[i].click();
+                return;
+            }
+        }
+        // Fallback: try all buttons
+        buttons = window.parent.document.querySelectorAll('button');
+        for (var i = 0; i < buttons.length; i++) {
+            if (buttons[i].textContent.trim() === 'Search') {
+                buttons[i].click();
+                return;
+            }
+        }
+    }
+    setTimeout(clickSearch, 1000);
+    </script>
+    """, height=0)
 
 st.markdown("---")
 
