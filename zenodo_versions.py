@@ -132,14 +132,37 @@ def download_file(url: str, dest: Path, token: str = None):
     print()
 
 
+def is_version_complete(version_dir: Path, version: dict) -> bool:
+    """Check if a version is already fully downloaded (all files present with correct checksums)."""
+    meta_file = version_dir / "_metadata.json"
+    if not meta_file.exists():
+        return False
+
+    files = version.get("files", [])
+    for file_info in files:
+        dest = version_dir / file_info["key"]
+        if not dest.exists():
+            return False
+        existing_md5 = hashlib.md5(dest.read_bytes()).hexdigest()
+        expected_md5 = file_info.get("checksum", "").replace("md5:", "")
+        if existing_md5 != expected_md5:
+            return False
+    return True
+
+
 def download_all_versions(versions: list[dict], base_dir: Path, token: str = None):
-    """Download all files for all versions."""
+    """Download all files for all versions. Skips versions already fully downloaded."""
     for i, version in enumerate(versions):
         record_id = version["id"]
         version_label = version.get("metadata", {}).get("version", f"v{i+1}")
         pub_date = version.get("metadata", {}).get("publication_date", "unknown")
         version_dir = base_dir / f"{i+1:03d}_{version_label}_{record_id}"
         version_dir.mkdir(parents=True, exist_ok=True)
+
+        # Skip entirely if version is already complete
+        if is_version_complete(version_dir, version):
+            print(f"  [skip] Version {i+1} ({version_label}) already complete")
+            continue
 
         print(f"\n{'='*60}")
         print(f"Version {i+1}: {version_label} (published {pub_date}, id={record_id})")
@@ -156,7 +179,6 @@ def download_all_versions(versions: list[dict], base_dir: Path, token: str = Non
             dest = version_dir / filename
 
             if dest.exists():
-                # Check checksum
                 existing_md5 = hashlib.md5(dest.read_bytes()).hexdigest()
                 if existing_md5 == file_info.get("checksum", "").replace("md5:", ""):
                     print(f"  [skip] {filename} (already downloaded)")
