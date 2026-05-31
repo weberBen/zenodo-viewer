@@ -632,7 +632,24 @@ elif active_tab == "Browse":
         file_name = st.selectbox("File", file_names, key="browse_f")
         content = texts[file_name]
 
-        st.markdown(f"**{len(content):,} characters, {len(content.splitlines()):,} lines**")
+        # File path info & open in explorer
+        version_dir = text_dirs[idx][1].parent
+        text_file_path = text_dirs[idx][1] / file_name
+        col_info, col_open, _ = st.columns([2, 1, 2])
+        with col_info:
+            st.markdown(f"**{len(content):,} characters, {len(content.splitlines()):,} lines**")
+        with col_open:
+            if st.button("Show file path", key="show_path"):
+                st.session_state["_show_path"] = not st.session_state.get("_show_path", False)
+        if st.session_state.get("_show_path"):
+            path_col, btn_col = st.columns([4, 1])
+            with path_col:
+                st.code(str(text_file_path), language=None)
+                st.caption(f"Version folder: `{version_dir}`")
+            with btn_col:
+                if st.button("Open in explorer", key="open_explorer"):
+                    import subprocess
+                    subprocess.Popen(["xdg-open", str(version_dir)])
 
         # browse_search is set directly by navigation before this widget renders
         local_search = st.text_input("Highlight text", key="browse_search")
