@@ -192,10 +192,21 @@ def compute_diff_lines(text_a: str, text_b: str) -> dict:
 
 st.sidebar.title("Zenodo Version Tracker")
 
-record_input = st.sidebar.text_input(
-    "Zenodo Record URL or ID",
-    value="https://zenodo.org/records/18437004",
+base_url = st.sidebar.text_input(
+    "Base URL",
+    value="https://zenodo.org/records",
 )
+base_url = base_url.rstrip("/")
+
+st.sidebar.caption(f"`{base_url}/`")
+_sidebar_col_doi, _sidebar_col_btn = st.sidebar.columns([3, 1])
+with _sidebar_col_doi:
+    record_doi = _sidebar_col_doi.text_input("Record DOI", value="18437004")
+with _sidebar_col_btn:
+    _sidebar_col_btn.markdown("<br>", unsafe_allow_html=True)
+    _sidebar_col_btn.link_button("🔗", f"{base_url}/{record_doi}", help="Open in browser")
+
+record_input = record_doi
 
 token = st.sidebar.text_input("API Token (optional)", type="password")
 
@@ -741,7 +752,7 @@ elif active_tab == "Browse":
         if st.session_state.get("_show_path"):
             full_meta = text_dirs[idx][2]
             zenodo_id = full_meta.get("id", "")
-            zenodo_url = f"https://zenodo.org/records/{zenodo_id}" if zenodo_id else ""
+            zenodo_url = f"{base_url}/{zenodo_id}" if zenodo_id else ""
 
             import subprocess
 
