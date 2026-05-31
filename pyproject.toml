@@ -1,7 +1,7 @@
 [project]
-name = "test-version-zenodo"
+name = "zenodo-viewer"
 version = "0.1.0"
-description = "Add your description here"
+description = "Zenodo Version Tracker - compare and browse Zenodo record versions"
 requires-python = ">=3.12"
 dependencies = [
     "jinja2>=3.1.6",
@@ -14,3 +14,7 @@ dependencies = [
     "streamlit-diff-viewer>=0.0.2",
     "streamlit-vis-timeline>=0.3.0",
 ]
+
+[project.scripts]
+zenodo_viewer = "zenodo_viewer:main"
+zw = "zenodo_viewer:main"

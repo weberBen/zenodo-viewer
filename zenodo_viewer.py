@@ -3,8 +3,23 @@
 Zenodo Version Tracker - Streamlit GUI
 =======================================
 Usage:
-    uv run streamlit run app.py
+    uv tool install .
+    zenodo_viewer
+    zw
 """
+
+
+def main():
+    """Entry point for `zenodo_viewer` and `zw` commands."""
+    import sys
+    from streamlit.web.cli import main as st_main
+    sys.argv = ["streamlit", "run", __file__]
+    st_main()
+
+
+# When executed directly (not by Streamlit's script runner), launch Streamlit
+if __name__ == "__main__" and "streamlit.runtime.scriptrunner" not in __import__("sys").modules:
+    main()
 
 import difflib
 import hashlib
@@ -539,8 +554,7 @@ if "_timeline_init_done" not in st.session_state:
                 return;
             }
         }
-        // Fallback: try all buttons
-        buttons = window.parent.document.querySelectorAll('button');
+        var buttons = window.parent.document.querySelectorAll('button');
         for (var i = 0; i < buttons.length; i++) {
             if (buttons[i].textContent.trim() === 'Search') {
                 buttons[i].click();
