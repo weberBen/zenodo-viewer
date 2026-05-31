@@ -490,7 +490,7 @@ def human_timedelta(date_str: str) -> str:
 
 st.header("Version Timeline")
 
-timeline_tab, activity_tab = st.tabs(["Timeline", "Activity"])
+activity_tab, timeline_tab = st.tabs(["Activity", "Timeline"])
 
 with timeline_tab:
     timeline_items = []
@@ -519,15 +519,15 @@ with timeline_tab:
                 "selectable": True,
                 "zoomable": True,
                 "moveable": True,
-                "height": "220px",
-                "margin": {"item": 10},
+                "height": "230px",
+                "margin": {"item": 5},
                 "zoomMin": 1000 * 60 * 60 * 24,
                 "zoomMax": 1000 * 60 * 60 * 24 * 365 * 2,
                 "start": padded_start,
                 "end": padded_end,
                 "showCurrentTime": True,
             },
-            height="220px",
+            height="210px",
         )
 
         if selected and "id" in selected:
@@ -556,6 +556,9 @@ with activity_tab:
 
         calendar_list = []
         series_list = []
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        today_year = today_str[:4]
+
         for idx, year in enumerate(years):
             year_data = [d for d in activity_data if d[0].startswith(year)]
             calendar_list.append({
@@ -575,6 +578,21 @@ with activity_tab:
                 "calendarIndex": idx,
                 "data": year_data,
             })
+            if year == today_year:
+                series_list.append({
+                    "type": "scatter",
+                    "coordinateSystem": "calendar",
+                    "calendarIndex": idx,
+                    "data": [[today_str, 0]],
+                    "symbol": "rect",
+                    "symbolSize": [13, 13],
+                    "itemStyle": {
+                        "color": "transparent",
+                        "borderColor": "red",
+                        "borderWidth": 2,
+                    },
+                    "tooltip": {"formatter": "Today"},
+                })
 
         options = {
             "tooltip": {
@@ -599,58 +617,12 @@ with activity_tab:
         chart_height = f"{max(200, 50 + len(years) * 120 + 50)}px"
         st_echarts(options=options, height=chart_height)
 
-# ---------------------------------------------------------------------------
-# Workaround: streamlit-timeline (vis.js) does not render on first page load.
-#
-# vis.js initializes inside a Streamlit iframe whose dimensions are not yet
-# finalized, resulting in a blank canvas. Manually clicking the "Search" tab
-# fixes it because the Streamlit rerun with lighter content lets the layout
-# stabilize and vis.js recalculates its dimensions.
-#
-# Approaches that did NOT work:
-# - st.rerun() on first load: stops execution before the browser renders
-#   anything, so the timeline is never displayed in the first place.
-# - Dispatching window.dispatchEvent(new Event('resize')) from a
-#   components.html script: runs in its own iframe, not in the vis.js one.
-#   The resize event never reaches vis.js.
-# - Injecting a resize event into streamlit-timeline's own index.html:
-#   vis.js has not finished initializing when the event fires, so it is
-#   ignored.
-# - Passing height=220 to _component_func: fixes the iframe size but does
-#   not solve the internal vis.js initialization issue.
-# - Targeting sibling iframes via window.parent.document.querySelectorAll
-#   to dispatch resize: blocked by cross-origin restrictions between iframes.
-#
-# Working solution: inject a client-side JS script that waits 1 second
-# (enough for the page to fully render), then clicks the "Search" button
-# in the parent DOM. This triggers a Streamlit rerun identical to a user
-# click, forcing vis.js to re-initialize correctly. The _timeline_init_done
-# flag prevents this from repeating on subsequent reruns.
-# ---------------------------------------------------------------------------
-if "_timeline_init_done" not in st.session_state:
-    st.session_state["_timeline_init_done"] = True
-    import streamlit.components.v1 as components
-    components.html("""
-    <script>
-    function clickSearch() {
-        var buttons = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
-        for (var i = 0; i < buttons.length; i++) {
-            if (buttons[i].textContent.trim() === 'Search') {
-                buttons[i].click();
-                return;
-            }
-        }
-        var buttons = window.parent.document.querySelectorAll('button');
-        for (var i = 0; i < buttons.length; i++) {
-            if (buttons[i].textContent.trim() === 'Search') {
-                buttons[i].click();
-                return;
-            }
-        }
-    }
-    setTimeout(clickSearch, 1000);
-    </script>
-    """, height=0)
+    last_created = text_dirs[-1][2].get("created", "")[:10]
+    st.markdown(
+        f'<p style="font-size: 1.1em; color: black; margin-top: 4px;">'
+        f'Last publication: <strong>{last_created}</strong> ({human_timedelta(last_created)})</p>',
+        unsafe_allow_html=True,
+    )
 
 st.markdown("---")
 
