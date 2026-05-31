@@ -33,7 +33,7 @@ st.set_page_config(page_title="Zenodo Version Tracker", layout="wide")
 
 TABS = ["Diff Viewer", "Search", "Browse"]
 
-APP_CONFIG_DIR = Path.home() / ".config" / "zenodo_tracker"
+APP_CONFIG_DIR = Path.home() / ".config" / "zenodo_viewer"
 APP_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 LAST_PATH_FILE = APP_CONFIG_DIR / "last_path"
 PREFS_FILENAME = ".zenodo_prefs.json"
