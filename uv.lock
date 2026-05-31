@@ -977,6 +977,15 @@ wheels = [
 ]
 
 [[package]]
+name = "setuptools"
+version = "69.5.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d6/4f/b10f707e14ef7de524fe1f8988a294fb262a29c9b5b12275c7e188864aed/setuptools-69.5.1.tar.gz", hash = "sha256:6c1fccdac05a97e598fb0ae3bbed5904ccb317337a51139dcd51453611bbb987", size = 2291314, upload-time = "2024-04-13T21:06:28.589Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f7/29/13965af254e3373bceae8fb9a0e6ea0d0e571171b80d6646932131d6439b/setuptools-69.5.1-py3-none-any.whl", hash = "sha256:c636ac361bc47580504644275c9ad802c50415c7522212252c033bd15f301f32", size = 894566, upload-time = "2024-04-13T21:06:23.256Z" },
+]
+
+[[package]]
 name = "six"
 version = "1.17.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1055,6 +1064,18 @@ wheels = [
 ]
 
 [[package]]
+name = "streamlit-vis-timeline"
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "streamlit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d6/87/3b34db238802abddc2a2f9f5834627e71957592855626d8fb18d300ad662/streamlit-vis-timeline-0.3.0.tar.gz", hash = "sha256:76d788eaf31512560e5a521944009f3bdd996eca4f2e941019f260e81be92f12", size = 1169930, upload-time = "2023-02-21T18:22:58.304Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e8/15/d61d4413280520bb40d619e69f7f0db89f2d01d0ae0cbff8b96eef1cd437/streamlit_vis_timeline-0.3.0-py3-none-any.whl", hash = "sha256:c1f1e3b2cc936e169de3cef26e95da46d2ff7e2d66e6cfb997a1942b58e28f7e", size = 1185538, upload-time = "2023-02-21T18:22:56.271Z" },
+]
+
+[[package]]
 name = "tabulate"
 version = "0.10.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1082,8 +1103,10 @@ dependencies = [
     { name = "pymupdf4llm" },
     { name = "requests" },
     { name = "rich" },
+    { name = "setuptools" },
     { name = "streamlit" },
     { name = "streamlit-diff-viewer" },
+    { name = "streamlit-vis-timeline" },
 ]
 
 [package.metadata]
@@ -1093,8 +1116,10 @@ requires-dist = [
     { name = "pymupdf4llm", specifier = ">=1.27.2.3" },
     { name = "requests", specifier = ">=2.34.2" },
     { name = "rich", specifier = ">=15.0.0" },
+    { name = "setuptools", specifier = "<70" },
     { name = "streamlit", specifier = ">=1.58.0" },
     { name = "streamlit-diff-viewer", specifier = ">=0.0.2" },
+    { name = "streamlit-vis-timeline", specifier = ">=0.3.0" },
 ]
 
 [[package]]

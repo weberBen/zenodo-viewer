@@ -9,6 +9,8 @@ dependencies = [
     "pymupdf4llm>=1.27.2.3",
     "requests>=2.34.2",
     "rich>=15.0.0",
+    "setuptools<70",
     "streamlit>=1.58.0",
     "streamlit-diff-viewer>=0.0.2",
+    "streamlit-vis-timeline>=0.3.0",
 ]
