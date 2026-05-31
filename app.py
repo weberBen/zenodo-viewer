@@ -315,7 +315,7 @@ if st.sidebar.button("Fetch & Download", type="primary"):
         st.stop()
 
     versions = fetch_versions(record_id)
-    st.sidebar.success(f"Found {len(versions)} version(s)")
+    st.toast(f"Found {len(versions)} version(s)", icon="🔍")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     DOWNLOADS_DIR.mkdir(exist_ok=True)
@@ -327,7 +327,10 @@ if st.sidebar.button("Fetch & Download", type="primary"):
         "token": token,
     })
 
+    st.toast("Downloading & processing...", icon="⏳")
     progress = st.sidebar.progress(0, text="Downloading...")
+    downloaded_count = 0
+    skipped_count = 0
     for i, version in enumerate(versions):
         vid = version["id"]
         version_label = version.get("metadata", {}).get("version", f"v{i+1}")
@@ -349,6 +352,7 @@ if st.sidebar.button("Fetch & Download", type="primary"):
                     break
 
         if not already_done:
+            downloaded_count += 1
             for file_info in files:
                 filename = file_info["key"]
                 file_url = file_info["links"]["self"]
@@ -365,6 +369,8 @@ if st.sidebar.button("Fetch & Download", type="primary"):
                         f.write(chunk)
 
             meta_file.write_text(json.dumps(version, indent=2))
+        else:
+            skipped_count += 1
 
         extract_archives(version_dir)
         target_files = find_target_files(version_dir)
@@ -374,7 +380,12 @@ if st.sidebar.button("Fetch & Download", type="primary"):
         progress.progress((i + 1) / len(versions), text=f"Version {i+1}/{len(versions)}")
 
     progress.empty()
-    st.sidebar.success("Done!")
+    if downloaded_count == 0:
+        st.toast(f"Already up to date ({skipped_count} version(s))", icon="✅")
+    else:
+        st.toast(f"Downloaded {downloaded_count} new, {skipped_count} up to date", icon="✅")
+    import time
+    time.sleep(3)
     st.rerun()
 
 # ---------------------------------------------------------------------------
