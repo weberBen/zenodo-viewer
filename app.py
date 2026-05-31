@@ -29,12 +29,66 @@ from zenodo_versions import (
 # Config
 # ---------------------------------------------------------------------------
 
-OUTPUT_DIR = Path("zenodo_output")
-DOWNLOADS_DIR = OUTPUT_DIR / "downloads"
-
 st.set_page_config(page_title="Zenodo Version Tracker", layout="wide")
 
 TABS = ["Diff Viewer", "Search", "Browse"]
+
+APP_CONFIG_DIR = Path.home() / ".config" / "zenodo_tracker"
+APP_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+LAST_PATH_FILE = APP_CONFIG_DIR / "last_path"
+PREFS_FILENAME = ".zenodo_prefs.json"
+
+
+def load_last_output_dir() -> str:
+    """Load last used output directory from local config."""
+    if LAST_PATH_FILE.exists():
+        return LAST_PATH_FILE.read_text().strip()
+    return str(Path.cwd() / "zenodo_output")
+
+
+def save_last_output_dir(path: str):
+    """Persist last used output directory to local config."""
+    LAST_PATH_FILE.write_text(path)
+
+
+def load_prefs(output_dir: Path) -> dict:
+    """Load project preferences from the output directory."""
+    prefs_file = output_dir / PREFS_FILENAME
+    if prefs_file.exists():
+        return json.loads(prefs_file.read_text())
+    return {}
+
+
+def save_prefs(output_dir: Path, prefs: dict):
+    """Save project preferences to the output directory."""
+    prefs_file = output_dir / PREFS_FILENAME
+    prefs_file.write_text(json.dumps(prefs, indent=2))
+
+
+def pick_folder() -> str | None:
+    """Open the native file explorer folder picker."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["zenity", "--file-selection", "--directory", "--title=Select output directory"],
+            capture_output=True, text=True, timeout=120,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except FileNotFoundError:
+        # zenity not available, fallback to kdialog
+        try:
+            result = subprocess.run(
+                ["kdialog", "--getexistingdirectory", "."],
+                capture_output=True, text=True, timeout=120,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()
+        except (FileNotFoundError, Exception):
+            pass
+    except Exception:
+        pass
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -100,12 +154,12 @@ def get_created_date(full_meta: dict) -> str:
     return full_meta.get("metadata", {}).get("publication_date", "?")
 
 
-def load_text_dirs() -> list[tuple[str, Path, dict]]:
+def load_text_dirs(downloads_dir: Path) -> list[tuple[str, Path, dict]]:
     """Load all _text directories with full record metadata."""
     text_dirs = []
-    if not DOWNLOADS_DIR.exists():
+    if not downloads_dir.exists():
         return text_dirs
-    for version_dir in sorted(DOWNLOADS_DIR.iterdir()):
+    for version_dir in sorted(downloads_dir.iterdir()):
         if not version_dir.is_dir():
             continue
         text_dir = version_dir / "_text"
@@ -192,23 +246,66 @@ def compute_diff_lines(text_a: str, text_b: str) -> dict:
 
 st.sidebar.title("Zenodo Version Tracker")
 
+# ---------------------------------------------------------------------------
+# Output directory selection
+# ---------------------------------------------------------------------------
+
+if "_output_dir" not in st.session_state:
+    st.session_state["_output_dir"] = load_last_output_dir()
+
+# Handle folder picker result (must be before widget creation to update key)
+if "_picked_folder" in st.session_state:
+    st.session_state["_output_dir"] = st.session_state.pop("_picked_folder")
+
+_dir_col_input, _dir_col_btns = st.sidebar.columns([3, 1])
+with _dir_col_input:
+    output_dir_str = st.text_input("Output directory", key="_output_dir")
+with _dir_col_btns:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("📂", help="Browse for folder", key="pick_folder"):
+        picked = pick_folder()
+        if picked:
+            st.session_state["_picked_folder"] = picked
+            save_last_output_dir(picked)
+            st.rerun()
+
+# Persist manual text input changes
+save_last_output_dir(output_dir_str)
+
+OUTPUT_DIR = Path(output_dir_str)
+DOWNLOADS_DIR = OUTPUT_DIR / "downloads"
+
+# Load prefs from output directory if available
+_prefs = load_prefs(OUTPUT_DIR) if OUTPUT_DIR.exists() else {}
+
+# ---------------------------------------------------------------------------
+# Record settings (pre-filled from prefs)
+# ---------------------------------------------------------------------------
+
 base_url = st.sidebar.text_input(
     "Base URL",
-    value="https://zenodo.org/records",
+    value=_prefs.get("base_url", "https://zenodo.org/records"),
 )
 base_url = base_url.rstrip("/")
 
 st.sidebar.caption(f"`{base_url}/`")
 _sidebar_col_doi, _sidebar_col_btn = st.sidebar.columns([3, 1])
 with _sidebar_col_doi:
-    record_doi = _sidebar_col_doi.text_input("Record DOI", value="18437004")
+    record_doi = _sidebar_col_doi.text_input(
+        "Record DOI",
+        value=_prefs.get("record_doi", "18437004"),
+    )
 with _sidebar_col_btn:
     _sidebar_col_btn.markdown("<br>", unsafe_allow_html=True)
     _sidebar_col_btn.link_button("🔗", f"{base_url}/{record_doi}", help="Open in browser")
 
 record_input = record_doi
 
-token = st.sidebar.text_input("API Token (optional)", type="password")
+token = st.sidebar.text_input(
+    "API Token (optional)",
+    type="password",
+    value=_prefs.get("token", ""),
+)
 
 if st.sidebar.button("Fetch & Download", type="primary"):
     try:
@@ -222,6 +319,13 @@ if st.sidebar.button("Fetch & Download", type="primary"):
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     DOWNLOADS_DIR.mkdir(exist_ok=True)
+
+    # Save preferences to the output directory
+    save_prefs(OUTPUT_DIR, {
+        "base_url": base_url,
+        "record_doi": record_doi,
+        "token": token,
+    })
 
     progress = st.sidebar.progress(0, text="Downloading...")
     for i, version in enumerate(versions):
@@ -277,7 +381,7 @@ if st.sidebar.button("Fetch & Download", type="primary"):
 # Load data
 # ---------------------------------------------------------------------------
 
-text_dirs = load_text_dirs()
+text_dirs = load_text_dirs(DOWNLOADS_DIR)
 
 if not text_dirs:
     st.info("No data yet. Enter a Zenodo record URL and click 'Fetch & Download' in the sidebar.")
