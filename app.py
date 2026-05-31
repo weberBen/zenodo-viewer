@@ -339,6 +339,15 @@ st.markdown("---")
 nav_target = st.session_state.pop("_nav_target", None)
 if nav_target:
     st.session_state["tab_selector"] = nav_target
+    # Also sync browse widgets so selectboxes show the correct selection
+    if nav_target == "Browse" and "browse_version" in st.session_state:
+        st.session_state["browse_v"] = st.session_state["browse_version"]
+    if nav_target == "Browse" and "browse_file" in st.session_state:
+        # browse_f uses the filename directly, but selectbox expects index for range options
+        # We handle it by setting browse_f_pending and resolving inside the Browse tab
+        st.session_state["_browse_file_pending"] = st.session_state.pop("browse_file")
+    if nav_target == "Browse" and "browse_highlight" in st.session_state:
+        st.session_state["browse_search"] = st.session_state.pop("browse_highlight")
 
 active_tab = st.segmented_control(
     "Navigation",
@@ -592,11 +601,10 @@ elif active_tab == "Search":
 elif active_tab == "Browse":
     st.header("Browse Version Content")
 
-    default_idx = st.session_state.get("browse_version", 0)
+    # browse_v is set directly by navigation before this widget renders
     idx = st.selectbox(
         "Select version",
         range(len(display_labels)),
-        index=min(default_idx, len(display_labels) - 1),
         format_func=lambda i: display_labels[i],
         key="browse_v",
     )
@@ -607,17 +615,19 @@ elif active_tab == "Browse":
         st.warning("No text files in this version.")
     else:
         file_names = sorted(texts.keys())
-        default_file = st.session_state.get("browse_file", file_names[0])
-        default_file_idx = file_names.index(default_file) if default_file in file_names else 0
 
-        file_name = st.selectbox("File", file_names, index=default_file_idx, key="browse_f")
+        # Apply pending file selection from navigation
+        pending_file = st.session_state.pop("_browse_file_pending", None)
+        if pending_file and pending_file in file_names:
+            st.session_state["browse_f"] = pending_file
+
+        file_name = st.selectbox("File", file_names, key="browse_f")
         content = texts[file_name]
 
         st.markdown(f"**{len(content):,} characters, {len(content.splitlines()):,} lines**")
 
-        # Highlight bar
-        default_highlight = st.session_state.pop("browse_highlight", "")
-        local_search = st.text_input("Highlight text", value=default_highlight, key="browse_search")
+        # browse_search is set directly by navigation before this widget renders
+        local_search = st.text_input("Highlight text", key="browse_search")
 
         lines = content.splitlines()
 
