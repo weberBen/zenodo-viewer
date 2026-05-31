@@ -219,6 +219,34 @@ def highlight_text_html(text: str, query: str, case_sensitive: bool = False) -> 
     )
 
 
+@st.cache_data(show_spinner=False)
+def compute_activity_data(_text_dirs_serializable: list[tuple[str, str, dict]]) -> list[list]:
+    """Compute activity data for the calendar heatmap.
+
+    Returns a list of [date_str, total_changes] for each version.
+    """
+    text_dirs_paths = [(label, Path(td_str), meta) for label, td_str, meta in _text_dirs_serializable]
+    activity = []
+    prev_texts = None
+    for i, (label, text_dir, full_meta) in enumerate(text_dirs_paths):
+        date = get_created_date(full_meta)
+        texts = load_version_text(text_dir)
+        if prev_texts is None:
+            total = sum(len(t.splitlines()) for t in texts.values())
+        else:
+            all_files = sorted(set(list(prev_texts.keys()) + list(texts.keys())))
+            total = 0
+            for f in all_files:
+                old = prev_texts.get(f, "")
+                new = texts.get(f, "")
+                if old != new:
+                    diff = compute_diff_lines(old, new)
+                    total += len(diff["added"]) + len(diff["removed"])
+        activity.append([date, total])
+        prev_texts = texts
+    return activity
+
+
 def compute_diff_lines(text_a: str, text_b: str) -> dict:
     """Compute diff and categorize lines as added, removed, or unchanged."""
     lines_a = text_a.splitlines()
@@ -462,49 +490,51 @@ def human_timedelta(date_str: str) -> str:
 
 st.header("Version Timeline")
 
+timeline_tab, activity_tab = st.tabs(["Timeline", "Activity"])
 
-timeline_items = []
-for i, (label, _, full_meta) in enumerate(text_dirs):
-    v = derive_version_name(full_meta)
-    created = full_meta.get("created", "2025-01-01")
-    title_text = full_meta.get("metadata", {}).get("title", "")
-    timeline_items.append({
-        "id": i,
-        "content": v,
-        "start": created,
-        "title": f"{v} ({get_created_date(full_meta)}) - {title_text}",
-    })
+with timeline_tab:
+    timeline_items = []
+    for i, (label, _, full_meta) in enumerate(text_dirs):
+        v = derive_version_name(full_meta)
+        created = full_meta.get("created", "2025-01-01")
+        title_text = full_meta.get("metadata", {}).get("title", "")
+        timeline_items.append({
+            "id": i,
+            "content": v,
+            "start": created,
+            "title": f"{v} ({get_created_date(full_meta)}) - {title_text}",
+        })
 
-if timeline_items:
-    from datetime import timedelta
+    if timeline_items:
+        from datetime import timedelta
 
-    last_date = timeline_items[-1]["start"][:10]
-    padded_start = (datetime.strptime(last_date, "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
-    padded_end = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
+        last_date = timeline_items[-1]["start"][:10]
+        padded_start = (datetime.strptime(last_date, "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
+        padded_end = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
 
-    selected = st_timeline(
-        timeline_items,
-        groups=[],
-        options={
-            "selectable": True,
-            "zoomable": True,
-            "moveable": True,
-            "height": "220px",
-            "margin": {"item": 10},
-            "zoomMin": 1000 * 60 * 60 * 24,
-            "zoomMax": 1000 * 60 * 60 * 24 * 365 * 2,
-            "start": padded_start,
-            "end": padded_end,
-            "showCurrentTime": True,
-        },
-        height="220px",
-    )
+        selected = st_timeline(
+            timeline_items,
+            groups=[],
+            options={
+                "selectable": True,
+                "zoomable": True,
+                "moveable": True,
+                "height": "220px",
+                "margin": {"item": 10},
+                "zoomMin": 1000 * 60 * 60 * 24,
+                "zoomMax": 1000 * 60 * 60 * 24 * 365 * 2,
+                "start": padded_start,
+                "end": padded_end,
+                "showCurrentTime": True,
+            },
+            height="220px",
+        )
 
-    if selected and "id" in selected:
-        clicked_id = selected["id"]
-        if st.session_state.get("_timeline_last_click") != clicked_id:
-            st.session_state["_timeline_last_click"] = clicked_id
-            navigate_to_browse(clicked_id)
+        if selected and "id" in selected:
+            clicked_id = selected["id"]
+            if st.session_state.get("_timeline_last_click") != clicked_id:
+                st.session_state["_timeline_last_click"] = clicked_id
+                navigate_to_browse(clicked_id)
 
     last_created = text_dirs[-1][2].get("created", "")[:10]
     st.markdown(
@@ -512,6 +542,62 @@ if timeline_items:
         f'Last publication: <strong>{last_created}</strong> ({human_timedelta(last_created)})</p>',
         unsafe_allow_html=True,
     )
+
+with activity_tab:
+    from streamlit_echarts import st_echarts
+
+    text_dirs_serializable = [(label, str(td), meta) for label, td, meta in text_dirs]
+    activity_data = compute_activity_data(text_dirs_serializable)
+
+    if activity_data:
+        dates = [d[0] for d in activity_data]
+        years = sorted(set(d[:4] for d in dates))
+        max_val = max((d[1] for d in activity_data), default=1)
+
+        calendar_list = []
+        series_list = []
+        for idx, year in enumerate(years):
+            year_data = [d for d in activity_data if d[0].startswith(year)]
+            calendar_list.append({
+                "range": year,
+                "cellSize": [13, 13],
+                "top": 50 + idx * 120,
+                "left": 60,
+                "right": 30,
+                "splitLine": {"show": False},
+                "itemStyle": {"borderColor": "#fff", "borderWidth": 2},
+                "dayLabel": {"nameMap": "en", "firstDay": 1},
+                "monthLabel": {"nameMap": "en"},
+            })
+            series_list.append({
+                "type": "heatmap",
+                "coordinateSystem": "calendar",
+                "calendarIndex": idx,
+                "data": year_data,
+            })
+
+        options = {
+            "tooltip": {
+                "position": "top",
+                "formatter": "{b}: {c} lines changed",
+            },
+            "visualMap": {
+                "min": 0,
+                "max": max_val,
+                "type": "piecewise",
+                "orient": "horizontal",
+                "left": 60,
+                "bottom": 10,
+                "inRange": {
+                    "color": ["#ebedf0", "#c6e48b", "#7bc96f", "#239a3b", "#196127"],
+                },
+            },
+            "calendar": calendar_list,
+            "series": series_list,
+        }
+
+        chart_height = f"{max(200, 50 + len(years) * 120 + 50)}px"
+        st_echarts(options=options, height=chart_height)
 
 # ---------------------------------------------------------------------------
 # Workaround: streamlit-timeline (vis.js) does not render on first page load.

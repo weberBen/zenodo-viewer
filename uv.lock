@@ -1064,6 +1064,18 @@ wheels = [
 ]
 
 [[package]]
+name = "streamlit-echarts"
+version = "0.6.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "streamlit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/50/64/e29496efd311f8ca3c4904b8da6011f1cca3c90df86d4aa7e142c712ce51/streamlit_echarts-0.6.1.tar.gz", hash = "sha256:01712a7de6ee22a01580632545d905d98049130ed3cd66737545a98e35ee0002", size = 697949, upload-time = "2026-05-30T15:14:55.296Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/99/de/daf441ab1f820dd5d279fc81d1607821e7f993472063385f3796e1482301/streamlit_echarts-0.6.1-py3-none-any.whl", hash = "sha256:c98eef11107be32465fc4a4c1b5eb3bdc40c6bd6168de62d2f4dd907da7c2582", size = 700792, upload-time = "2026-05-30T15:14:54.046Z" },
+]
+
+[[package]]
 name = "streamlit-vis-timeline"
 version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1218,6 +1230,7 @@ dependencies = [
     { name = "setuptools" },
     { name = "streamlit" },
     { name = "streamlit-diff-viewer" },
+    { name = "streamlit-echarts" },
     { name = "streamlit-vis-timeline" },
 ]
 
@@ -1231,5 +1244,6 @@ requires-dist = [
     { name = "setuptools", specifier = "<70" },
     { name = "streamlit", specifier = ">=1.58.0" },
     { name = "streamlit-diff-viewer", specifier = ">=0.0.2" },
+    { name = "streamlit-echarts", specifier = ">=0.6.1" },
     { name = "streamlit-vis-timeline", specifier = ">=0.3.0" },
 ]
