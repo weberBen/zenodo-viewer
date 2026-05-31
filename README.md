@@ -36,7 +36,19 @@ Features:
 
 1. **Output directory** — Set the local path where all downloaded files, converted text, and metadata will be stored. This is persisted between sessions. The folder structure is created automatically.
 
-2. **Fetch & Download** — Enter a Zenodo record URL or ID, then click "Fetch & Download". The app queries the Zenodo API to find all versions of that record (via `conceptrecid`), downloads every file, extracts archives, converts PDFs to Markdown, and stores everything in the output directory. Already-downloaded versions are skipped (checked via MD5).
+2. **Fetch & Download** — Enter any record ID or URL from the version history. The app resolves the `conceptrecid` (concept DOI) via the Zenodo API to discover all versions of that record, not just the one you pointed to. You don't need to find the "first" or "latest" — any version ID works as entry point.
+
+### Processing
+
+For each version, the app:
+
+1. Downloads all attached files (PDF, archives, etc.)
+2. Extracts ZIP/TAR archives
+3. Recursively searches the extracted tree for `.pdf` and `.tex`/`.latex` files
+4. Converts PDFs to Markdown using `pymupdf4llm` (or `marker-pdf` if enabled — better quality but requires PyTorch/GPU)
+5. Copies TeX source files as-is into the `_text/` folder
+
+The result is a `_text/` directory per version containing readable Markdown and TeX files, ready for diff and search. Already-downloaded versions are skipped (verified via MD5 checksum).
 
 ### CLI
 
