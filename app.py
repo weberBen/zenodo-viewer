@@ -43,7 +43,7 @@ TABS = ["Diff Viewer", "Search", "Browse"]
 
 def navigate_to_browse(version_idx: int, file_name: str = None, line: int = None, highlight: str = None):
     """Navigate to Browse tab showing a specific version."""
-    st.session_state["active_tab"] = "Browse"
+    st.session_state["_nav_target"] = "Browse"
     st.session_state["browse_version"] = version_idx
     if file_name:
         st.session_state["browse_file"] = file_name
@@ -335,19 +335,18 @@ st.markdown("---")
 # Tab navigation via segmented control (supports programmatic switching)
 # ---------------------------------------------------------------------------
 
-if "active_tab" not in st.session_state:
-    st.session_state["active_tab"] = TABS[0]
+# Apply pending navigation (must happen before widget instantiation)
+nav_target = st.session_state.pop("_nav_target", None)
+if nav_target:
+    st.session_state["tab_selector"] = nav_target
 
 active_tab = st.segmented_control(
     "Navigation",
     TABS,
-    default=st.session_state["active_tab"],
+    default=TABS[0],
     key="tab_selector",
     label_visibility="collapsed",
 )
-
-if active_tab:
-    st.session_state["active_tab"] = active_tab
 
 # ---------------------------------------------------------------------------
 # Tab: Diff Viewer
